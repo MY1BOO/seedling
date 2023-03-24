@@ -1,4 +1,5 @@
 # seedling
+
 ###seedling v2.0 雏形版本
 介绍：
 
@@ -14,4 +15,21 @@
 然后利用select配合chan阻塞等待StartReader完成，StartReader其实
 是真正执行读写数据的方法，但在处理前要defer stop()确保正常退出
 
-总结：单独的监听者Goroutine会开启很多个业务处理Goroutine，每个业务处理Goroutine会开启一个执行HandFunc的Goroutine
+总结：单独的监听者Goroutine会开启很多个业务处理Goroutine，
+每个业务处理Goroutine会开启一个执行HandFunc的Goroutine
+
+###seedling v4.0
+介绍：
+
+1.定义request接口和router接口及其实现类
+
+2.router其实是处理业务的方法集合，包含前置处理、处理、后置处理，
+request包含一个socket连接和从客户端接收到的数据，作为router中方法的参数
+
+3.server实例初始化时要传入一个用户自定义好的router，然后在listener协程创建connection
+的时候，也要将router传入，代替v2.0中的HandFunc进行业务处理。
+
+4.小技巧：先定义一个BaseRouter基类，只不过当中的三个方法全为空，然后在自定义router
+的时候，都先继承这个BaseRouter，这样就更灵活，不用全部实现所有方法也可以是router接口的实现类
+
+5.通过读文件+json解析实现全局配置

@@ -1,9 +1,9 @@
 package net
 
 import (
-	"errors"
 	"fmt"
 	"github.com/MY1BOO/seedling/iface"
+	"github.com/MY1BOO/seedling/utils"
 	"net"
 	"time"
 )
@@ -18,24 +18,19 @@ type Server struct {
 	IP string
 	//服务绑定的端口
 	Port int
-}
-
-//============== 定义当前客户端连接的handle api ===========
-func CallBackToClient(conn *net.TCPConn, data []byte, cnt int) error {
-	//回显业务
-	fmt.Println("[Conn Handle] CallBackToClient ... ")
-	if _, err := conn.Write(data[:cnt]); err != nil {
-		fmt.Println("write back buf err ", err)
-		return errors.New("CallBackToClient error")
-	}
-	return nil
+	//当前Server由用户绑定的回调router,也就是Server注册的连接对应的处理业务
+	Router iface.IRouter
 }
 
 //============== 实现 iface.IServer 里的全部接口方法 ========
 
 //开启网络服务
 func (s *Server) Start() {
-	fmt.Printf("[START] Server listenner at IP: %s, Port %d, is starting\n", s.IP, s.Port)
+	fmt.Printf("[START] Server name: %s,listenner at IP: %s, Port %d is starting\n", s.Name, s.IP, s.Port)
+	fmt.Printf("[Seedling] Version: %s, MaxConn: %d,  MaxPacketSize: %d\n",
+		utils.GlobalObject.Version,
+		utils.GlobalObject.MaxConn,
+		utils.GlobalObject.MaxPacketSize)
 
 	//开启一个go去做服务端Linster业务
 	go func() {
@@ -72,7 +67,7 @@ func (s *Server) Start() {
 			//3.2 TODO Server.Start() 设置服务器最大连接控制,如果超过最大连接，那么则关闭此新的连接
 
 			//3.3 处理该新连接请求的业务方法，此时应该有handler和conn是绑定的
-			dealConn := NewConntion(conn, cid, CallBackToClient)
+			dealConn := NewConntion(conn, cid, s.Router)
 			cid++
 
 			//3.4 启动当前连接的处理业务
@@ -98,16 +93,26 @@ func (s *Server) Serve() {
 	}
 }
 
+//路由功能：给当前服务注册一个路由业务方法，供客户端链接处理使用
+func (s *Server) AddRouter(router iface.IRouter) {
+	s.Router = router
+
+	fmt.Println("Add Router succ! ")
+}
+
 /*
   创建一个服务器句柄
 */
-func NewServer(name string) iface.IServer {
-	s := &Server{
-		Name:      name,
-		IPVersion: "tcp4",
-		IP:        "0.0.0.0",
-		Port:      7777,
-	}
+func NewServer() iface.IServer {
+	//先初始化全局配置文件
+	utils.GlobalObject.Reload()
 
+	s := &Server{
+		Name:      utils.GlobalObject.Name, //从全局参数获取
+		IPVersion: "tcp4",
+		IP:        utils.GlobalObject.Host,    //从全局参数获取
+		Port:      utils.GlobalObject.TcpPort, //从全局参数获取
+		Router:    nil,
+	}
 	return s
 }
