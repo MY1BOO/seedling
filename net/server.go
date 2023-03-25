@@ -34,6 +34,9 @@ func (s *Server) Start() {
 
 	//开启一个go去做服务端Linster业务
 	go func() {
+		//0 启动worker工作池机制
+		s.MsgHandler.StartWorkerPool()
+
 		//1 获取一个TCP的Addr
 		addr, err := net.ResolveTCPAddr(s.IPVersion, fmt.Sprintf("%s:%d", s.IP, s.Port))
 		if err != nil {
@@ -49,7 +52,7 @@ func (s *Server) Start() {
 		}
 
 		//已经监听成功
-		fmt.Println("start seedling server  ", s.Name, " succ, now listenning...")
+		fmt.Println("start Seedling server  ", s.Name, " succ, now listenning...")
 
 		//TODO server.go 应该有一个自动生成ID的方法
 		var cid uint32
@@ -77,7 +80,7 @@ func (s *Server) Start() {
 }
 
 func (s *Server) Stop() {
-	fmt.Println("[STOP] seedling server , name ", s.Name)
+	fmt.Println("[STOP] Seedling server , name ", s.Name)
 
 	//TODO  Server.Stop() 将其他需要清理的连接信息或者其他信息 也要一并停止或者清理
 }
