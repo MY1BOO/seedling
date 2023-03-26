@@ -59,9 +59,40 @@ func (this *HelloSeedlingRouter) Handle(request iface.IRequest) {
 	}
 }
 
+//创建连接的时候执行
+func DoConnectionBegin(conn iface.IConnection) {
+	fmt.Println("DoConnecionBegin is Called ... ")
+
+	fmt.Println("Set conn Name, Home done!")
+	conn.SetProperty("Name", "qiujun")
+	conn.SetProperty("Home", "qingdao")
+
+	err := conn.SendBuffMsg(2, []byte("DoConnection BEGIN..."))
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+//连接断开的时候执行
+func DoConnectionLost(conn iface.IConnection) {
+	if name, err := conn.GetProperty("Name"); err == nil {
+		fmt.Println("Conn Property Name = ", name)
+	}
+
+	if home, err := conn.GetProperty("Home"); err == nil {
+		fmt.Println("Conn Property Home = ", home)
+	}
+
+	fmt.Println("DoConneciotnLost is Called ... ")
+}
+
 func main() {
 	//创建一个server句柄
 	s := net.NewServer()
+
+	//注册连接hook回调函数
+	s.SetOnConnStart(DoConnectionBegin)
+	s.SetOnConnStop(DoConnectionLost)
 
 	s.AddRouter(0, &PingRouter{})
 	s.AddRouter(1, &HelloSeedlingRouter{})

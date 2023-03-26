@@ -20,6 +20,13 @@ type Server struct {
 	Port int
 	//当前Server由用户绑定的回调router,也就是Server注册的连接对应的处理业务
 	MsgHandler iface.IMsgHandle
+	//当前Server的连接管理器
+	ConnMgr iface.IConnManager
+
+	//该Server的连接创建时Hook函数
+	OnConnStart func(conn iface.IConnection)
+	//该Server的连接断开时的Hook函数
+	OnConnStop func(conn iface.IConnection)
 }
 
 //============== 实现 iface.IServer 里的全部接口方法 ========
@@ -67,10 +74,14 @@ func (s *Server) Start() {
 				continue
 			}
 
-			//3.2 TODO Server.Start() 设置服务器最大连接控制,如果超过最大连接，那么则关闭此新的连接
+			//3.2 设置服务器最大连接控制,如果超过最大连接，那么则关闭此新的连接
+			if s.ConnMgr.Len() >= utils.GlobalObject.MaxConn {
+				conn.Close()
+				continue
+			}
 
 			//3.3 处理该新连接请求的业务方法，此时应该有handler和conn是绑定的
-			dealConn := NewConntion(conn, cid, s.MsgHandler)
+			dealConn := NewConntion(s, conn, cid, s.MsgHandler)
 			cid++
 
 			//3.4 启动当前连接的处理业务
@@ -81,8 +92,8 @@ func (s *Server) Start() {
 
 func (s *Server) Stop() {
 	fmt.Println("[STOP] Seedling server , name ", s.Name)
-
-	//TODO  Server.Stop() 将其他需要清理的连接信息或者其他信息 也要一并停止或者清理
+	//将其他需要清理的连接信息或者其他信息 也要一并停止或者清理
+	s.ConnMgr.ClearConn()
 }
 
 func (s *Server) Serve() {
@@ -102,6 +113,37 @@ func (s *Server) AddRouter(msgId uint32, router iface.IRouter) {
 	fmt.Println("Add router succ! msgId = ", msgId)
 }
 
+//得到连接管理
+func (s *Server) GetConnMgr() iface.IConnManager {
+	return s.ConnMgr
+}
+
+//设置该Server的连接创建时Hook函数
+func (s *Server) SetOnConnStart(hookFunc func(iface.IConnection)) {
+	s.OnConnStart = hookFunc
+}
+
+//设置该Server的连接断开时的Hook函数
+func (s *Server) SetOnConnStop(hookFunc func(iface.IConnection)) {
+	s.OnConnStop = hookFunc
+}
+
+//调用连接OnConnStart Hook函数
+func (s *Server) CallOnConnStart(conn iface.IConnection) {
+	if s.OnConnStart != nil {
+		fmt.Println("---> CallOnConnStart....")
+		s.OnConnStart(conn)
+	}
+}
+
+//调用连接OnConnStop Hook函数
+func (s *Server) CallOnConnStop(conn iface.IConnection) {
+	if s.OnConnStop != nil {
+		fmt.Println("---> CallOnConnStop....")
+		s.OnConnStop(conn)
+	}
+}
+
 /*
   创建一个服务器句柄
 */
@@ -115,6 +157,7 @@ func NewServer() iface.IServer {
 		IP:         utils.GlobalObject.Host,    //从全局参数获取
 		Port:       utils.GlobalObject.TcpPort, //从全局参数获取
 		MsgHandler: NewMsgHandler(),            //msgHandler 初始化
+		ConnMgr:    NewConnManager(),           //创建ConnManager
 	}
 	return s
 }
