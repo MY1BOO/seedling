@@ -102,3 +102,139 @@ func (p *Player) BroadCastStartPosition() {
 
 	p.SendMsg(200, msg)
 }
+
+//广播玩家聊天
+func (p *Player) Talk(content string) {
+	//1. 组建MsgId200 proto数据
+	msg := &pb.BroadCast{
+		Pid: p.Pid,
+		Tp:  1, //TP 1 代表聊天广播
+		Data: &pb.BroadCast_Content{
+			Content: content,
+		},
+	}
+
+	//2. 得到当前世界所有的在线玩家
+	players := WorldMgrObj.GetAllPlayers()
+
+	//3. 向所有的玩家发送MsgId:200消息
+	for _, player := range players {
+		player.SendMsg(200, msg)
+	}
+}
+
+//给当前玩家周边的(九宫格内)玩家广播自己的位置，让他们显示自己
+func (p *Player) SyncSurrounding() {
+	//1 根据自己的位置，获取周围九宫格内的玩家pid
+	pids := WorldMgrObj.AoiMgr.GetPIDsByPos(p.X, p.Z)
+	//2 根据pid得到所有玩家对象
+	players := make([]*Player, 0, len(pids))
+	//3 给这些玩家发送MsgID:200消息，让自己出现在对方视野中
+	for _, pid := range pids {
+		players = append(players, WorldMgrObj.GetPlayerByPid(int32(pid)))
+	}
+	//3.1 组建MsgId200 proto数据
+	msg := &pb.BroadCast{
+		Pid: p.Pid,
+		Tp:  2, //TP2 代表广播坐标
+		Data: &pb.BroadCast_P{
+			P: &pb.Position{
+				X: p.X,
+				Y: p.Y,
+				Z: p.Z,
+				V: p.V,
+			},
+		},
+	}
+	//3.2 每个玩家分别给对应的客户端发送200消息，显示人物
+	for _, player := range players {
+		player.SendMsg(200, msg)
+	}
+	//4 让周围九宫格内的玩家出现在自己的视野中
+	//4.1 制作Message SyncPlayers 数据
+	playersData := make([]*pb.Player, 0, len(players))
+	for _, player := range players {
+		p := &pb.Player{
+			Pid: player.Pid,
+			P: &pb.Position{
+				X: player.X,
+				Y: player.Y,
+				Z: player.Z,
+				V: player.V,
+			},
+		}
+		playersData = append(playersData, p)
+	}
+
+	//4.2 封装SyncPlayer protobuf数据
+	SyncPlayersMsg := &pb.SyncPlayers{
+		Ps: playersData[:],
+	}
+
+	//4.3 给当前玩家发送需要显示周围的全部玩家数据
+	p.SendMsg(202, SyncPlayersMsg)
+}
+
+//广播玩家位置移动
+func (p *Player) UpdatePos(x float32, y float32, z float32, v float32) {
+	//更新玩家的位置信息
+	p.X = x
+	p.Y = y
+	p.Z = z
+	p.V = v
+
+	//组装protobuf协议，发送位置给周围玩家
+	msg := &pb.BroadCast{
+		Pid: p.Pid,
+		Tp:  4, //4 - 移动之后的坐标信息
+		Data: &pb.BroadCast_P{
+			P: &pb.Position{
+				X: p.X,
+				Y: p.Y,
+				Z: p.Z,
+				V: p.V,
+			},
+		},
+	}
+
+	//获取当前玩家周边全部玩家
+	players := p.GetSurroundingPlayers()
+	//向周边的每个玩家发送MsgID:200消息，移动位置更新消息
+	for _, player := range players {
+		player.SendMsg(200, msg)
+	}
+}
+
+//获得当前玩家的AOI周边玩家信息
+func (p *Player) GetSurroundingPlayers() []*Player {
+	//得到当前AOI区域的所有pid
+	pids := WorldMgrObj.AoiMgr.GetPIDsByPos(p.X, p.Z)
+
+	//将所有pid对应的Player放到Player切片中
+	players := make([]*Player, 0, len(pids))
+	for _, pid := range pids {
+		players = append(players, WorldMgrObj.GetPlayerByPid(int32(pid)))
+	}
+
+	return players
+}
+
+//玩家下线
+func (p *Player) LostConnection() {
+	//1 获取周围AOI九宫格内的玩家
+	players := p.GetSurroundingPlayers()
+
+	//2 封装MsgID:201消息
+	msg := &pb.SyncPid{
+		Pid: p.Pid,
+	}
+
+	//3 向周围玩家发送消息
+	for _, player := range players {
+		player.SendMsg(201, msg)
+	}
+
+	//4 世界管理器将当前玩家从AOI中摘除
+	WorldMgrObj.AoiMgr.RemoveFromGridByPos(int(p.Pid), p.X, p.Z)
+	WorldMgrObj.RemovePlayerByPid(p.Pid)
+}
